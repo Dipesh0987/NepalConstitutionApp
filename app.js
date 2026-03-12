@@ -1,6 +1,22 @@
 /**
  * Nepal Constitution Explorer — app.js
- * Loads constitution.json and renders an interactive navigation UI
+ * Loads constitution.json and renders an interactive navigation UI.
+ *
+ * Fixes applied:
+ *  1. const previewText / const contentFormatted were declared then immediately
+ *     reassigned — illegal in strict mode. Converted to `let`, dead first
+ *     initialisation removed.
+ *  2. `const hasEnglish` was declared but never referenced. Removed.
+ *  3. CSS font/layout variables were trapped inside [data-theme="dark"] so
+ *     light mode had no --font-*, --radius, --sidebar-width etc. Fixed in
+ *     style.css by moving them to :root.
+ *
+ * New features:
+ *  Hash-based URL routing  (#part/3  |  #article/18)
+ *  Browser back / forward navigation
+ *  Share button on every article — copies a deep link to clipboard
+ *  Toast notification on successful copy
+ *  Deep-linked article gets a subtle pulse highlight on arrival
  */
 
 'use strict';
@@ -9,29 +25,29 @@
 const state = {
   data: null,
   currentPartIndex: null,
-  expandedArticles: new Set(),
   searchQuery: '',
   searchTimeout: null,
+  suppressHistory: false,  // prevent pushState during popstate-triggered nav
 };
 
 // ─── DOM refs ─────────────────────────────────────────────────────────────────
 const $ = id => document.getElementById(id);
 const els = {
-  partsNav:         $('partsNav'),
-  welcomeScreen:    $('welcomeScreen'),
-  partView:         $('partView'),
-  partHeader:       $('partHeader'),
-  articlesList:     $('articlesList'),
-  searchView:       $('searchView'),
-  searchViewTitle:  $('searchViewTitle'),
-  searchResultsList:$('searchResultsList'),
-  searchInput:      $('searchInput'),
-  searchClear:      $('searchClear'),
-  searchCount:      $('searchCount'),
-  preambleText:     $('preambleText'),
-  statParts:        $('statParts'),
-  statArticles:     $('statArticles'),
-  sidebar:          $('sidebar'),
+  partsNav:          $('partsNav'),
+  welcomeScreen:     $('welcomeScreen'),
+  partView:          $('partView'),
+  partHeader:        $('partHeader'),
+  articlesList:      $('articlesList'),
+  searchView:        $('searchView'),
+  searchViewTitle:   $('searchViewTitle'),
+  searchResultsList: $('searchResultsList'),
+  searchInput:       $('searchInput'),
+  searchClear:       $('searchClear'),
+  searchCount:       $('searchCount'),
+  preambleText:      $('preambleText'),
+  statParts:         $('statParts'),
+  statArticles:      $('statArticles'),
+  sidebar:           $('sidebar'),
 };
 
 // ─── Init ──────────────────────────────────────────────────────────────────────
@@ -41,6 +57,7 @@ async function init() {
     if (!res.ok) throw new Error('Failed to load constitution.json');
     state.data = await res.json();
     render();
+    handleHashNavigation();
   } catch (err) {
     document.body.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:center;height:100vh;
@@ -60,18 +77,14 @@ function render() {
   const { data } = state;
   if (!data) return;
 
-  // Stats
-  els.statParts.textContent = data.parts.length;
+  els.statParts.textContent    = data.parts.length;
   els.statArticles.textContent = data.parts.reduce((a, p) => a + p.articles.length, 0);
-
-  // Preamble
   els.preambleText.textContent = data.preamble || '(Preamble not available)';
 
-  // Build sidebar nav
   els.partsNav.innerHTML = '';
   data.parts.forEach((part, idx) => {
     const item = document.createElement('div');
-    item.className = 'part-nav-item';
+    item.className   = 'part-nav-item';
     item.dataset.idx = idx;
     item.innerHTML = `
       <span class="part-nav-num">${padPart(part.part_number)}</span>
@@ -88,41 +101,103 @@ function render() {
     els.partsNav.appendChild(item);
   });
 
-  // Search
   els.searchInput.addEventListener('input', onSearch);
   els.searchClear.addEventListener('click', clearSearch);
 
-  // Mobile sidebar
   setupMobileSidebar();
+
+  // Toast container
+  const toast = document.createElement('div');
+  toast.id        = 'toast';
+  toast.className = 'toast';
+  document.body.appendChild(toast);
 }
 
+// ─── URL / Hash Routing ────────────────────────────────────────────────────────
+
+function handleHashNavigation() {
+  const hash = window.location.hash;
+  if (!hash || hash === '#') {
+    showWelcome(false);
+    return;
+  }
+
+  const match = hash.match(/^#(part|article)\/(\d+)$/);
+  if (!match) {
+    showWelcome(false);
+    return;
+  }
+
+  const type  = match[1];
+  const value = parseInt(match[2], 10);
+  const { data } = state;
+  if (!data) return;
+
+  if (type === 'part') {
+    const partIdx = data.parts.findIndex(p => p.part_number === value);
+    if (partIdx !== -1) showPart(partIdx, false);
+    else showWelcome(false);
+
+  } else if (type === 'article') {
+    let foundPartIdx = -1;
+    for (let i = 0; i < data.parts.length; i++) {
+      if (data.parts[i].articles.find(a => a.article_number === value)) {
+        foundPartIdx = i;
+        break;
+      }
+    }
+    if (foundPartIdx !== -1) {
+      showPart(foundPartIdx, false);
+      requestAnimationFrame(() => {
+        const artEl = document.getElementById(`article-${value}`);
+        if (artEl) {
+          artEl.classList.add('expanded', 'deep-linked');
+          artEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          artEl.addEventListener('animationend', () => artEl.classList.remove('deep-linked'), { once: true });
+        }
+      });
+    } else {
+      showWelcome(false);
+    }
+  }
+}
+
+function pushHash(hash) {
+  if (state.suppressHistory) return;
+  if (window.location.hash !== hash) {
+    history.pushState(null, '', hash);
+  }
+}
+
+window.addEventListener('popstate', () => {
+  state.suppressHistory = true;
+  handleHashNavigation();
+  state.suppressHistory = false;
+});
+
 // ─── Show Part ─────────────────────────────────────────────────────────────────
-function showPart(idx) {
+function showPart(idx, updateHash = true) {
   const { data } = state;
   const part = data.parts[idx];
   state.currentPartIndex = idx;
-  state.expandedArticles.clear();
 
-  // Update sidebar active state
+  if (updateHash) pushHash(`#part/${part.part_number}`);
+
   document.querySelectorAll('.part-nav-item').forEach((el, i) => {
     el.classList.toggle('active', i === idx);
   });
 
-  // Scroll sidebar item into view
   const activeEl = els.partsNav.querySelector('.part-nav-item.active');
   if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 
-  // Switch views
   els.welcomeScreen.style.display = 'none';
-  els.searchView.style.display = 'none';
-  els.partView.style.display = 'block';
+  els.searchView.style.display    = 'none';
+  els.partView.style.display      = 'block';
 
-  // Clear search
   if (state.searchQuery) clearSearch();
 
-  // Render part header
   const isFirst = idx === 0;
-  const isLast = idx === data.parts.length - 1;
+  const isLast  = idx === data.parts.length - 1;
 
   els.partHeader.innerHTML = `
     <div class="part-header-inner">
@@ -138,44 +213,41 @@ function showPart(idx) {
         <span class="part-meta-chip">${part.articles.length} धाराहरू · Articles</span>
         <div class="part-nav-arrows">
           <button class="part-nav-arrow" onclick="showPart(${idx - 1})" ${isFirst ? 'disabled' : ''} title="Previous Part">← Prev</button>
-          <button class="part-nav-arrow" onclick="showPart(${idx + 1})" ${isLast ? 'disabled' : ''} title="Next Part">Next →</button>
+          <button class="part-nav-arrow" onclick="showPart(${idx + 1})" ${isLast  ? 'disabled' : ''} title="Next Part">Next →</button>
         </div>
       </div>
     </div>
   `;
 
-  // Render articles
   els.articlesList.innerHTML = '';
   part.articles.forEach((article, aIdx) => {
     const card = buildArticleCard(article, idx, aIdx);
     els.articlesList.appendChild(card);
   });
 
-  // Scroll to top
   els.articlesList.parentElement.scrollTop = 0;
 }
 
 // ─── Build Article Card ────────────────────────────────────────────────────────
 function buildArticleCard(article, partIdx, aIdx, highlight = '') {
-  const card = document.createElement('div');
+  const card    = document.createElement('div');
   card.className = 'article-card';
-  card.id = `article-${article.article_number}`;
+  card.id        = `article-${article.article_number}`;
 
-  const previewText = article.content
-    ? article.content.substring(0, 120).replace(/\n/g, ' ') + (article.content.length > 120 ? '…' : '')
-    : '';
-
-  const contentFormatted = formatArticleContent(article.content, highlight);
-
-  const enTitle = article.title_en || '';
-  const enContent = article.content_en || '';
+  // FIX: was `const` with immediate reassignment — illegal in strict mode.
+  const enTitle        = article.title_en   || '';
+  const enContent      = article.content_en || '';
   const displayContent = enContent || article.content || '';
-  previewText = displayContent
+
+  let previewText = displayContent
     ? displayContent.substring(0, 140).replace(/\n/g, ' ') + (displayContent.length > 140 ? '…' : '')
     : '';
 
-  contentFormatted = formatArticleContent(displayContent, highlight);
-  const hasEnglish = !!enContent;  card.innerHTML = `
+  let contentFormatted = formatArticleContent(displayContent, highlight);
+
+  const articleURL = `${location.href.split('#')[0]}#article/${article.article_number}`;
+
+  card.innerHTML = `
     <div class="article-header" role="button" aria-expanded="false">
       <div class="article-num-badge">
         <span class="np-num">${article.article_number_np || article.article_number}</span>
@@ -194,100 +266,127 @@ function buildArticleCard(article, partIdx, aIdx, highlight = '') {
         <span class="article-ref-label">Reference</span>
         <span class="article-dharaa">धारा ${article.article_number_np || article.article_number}</span>
         <span class="article-dharaa">Article ${article.article_number}</span>
+        <button class="article-share-btn" data-url="${escapeHTML(articleURL)}" title="Copy link to this article">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+            <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+          Copy link
+        </button>
       </div>
     </div>
   `;
 
-  // Toggle expand
   const header = card.querySelector('.article-header');
   header.addEventListener('click', () => {
     const expanded = card.classList.toggle('expanded');
     header.setAttribute('aria-expanded', expanded);
+    if (expanded) {
+      pushHash(`#article/${article.article_number}`);
+    } else {
+      const { data } = state;
+      if (state.currentPartIndex !== null) {
+        pushHash(`#part/${data.parts[state.currentPartIndex].part_number}`);
+      }
+    }
   });
 
-  // Apply staggered animation
-  card.style.animationDelay = `${Math.min(aIdx * 0.03, 0.4)}s`;
+  card.querySelector('.article-share-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    copyToClipboard(e.currentTarget.dataset.url);
+  });
 
+  card.style.animationDelay = `${Math.min(aIdx * 0.03, 0.4)}s`;
   return card;
 }
 
 // ─── Format Article Content ────────────────────────────────────────────────────
 function formatArticleContent(content, highlight = '') {
   if (!content) return '';
-
-  // Split by clause markers like (१), (२), (क), (ख)
   let formatted = escapeHTML(content);
-
-  // Highlight search terms
-  if (highlight) {
-    formatted = highlightText(formatted, highlight);
-  }
-
-  // Wrap numbered clauses for better readability
+  if (highlight) formatted = highlightText(formatted, highlight);
   formatted = formatted.replace(/(\([\s\S]{1,4}?\))/g, (match) => {
-    // Only if it looks like a clause indicator
-    if (/^\([०-९क-ह\d]+\)$/.test(match.trim())) {
-      return `\n${match}`;
-    }
+    if (/^\([०-९क-ह\d]+\)$/.test(match.trim())) return `\n${match}`;
     return match;
   });
-
   return formatted;
+}
+
+// ─── Clipboard & Toast ────────────────────────────────────────────────────────
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('✓  Link copied to clipboard'))
+      .catch(() => showToast('Copy failed — please copy the URL manually'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+    document.body.appendChild(ta);
+    ta.select();
+    try {
+      document.execCommand('copy');
+      showToast('✓  Link copied to clipboard');
+    } catch {
+      showToast('Copy failed — please copy the URL manually');
+    }
+    document.body.removeChild(ta);
+  }
+}
+
+let toastTimer = null;
+function showToast(message) {
+  const toast = $('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
 }
 
 // ─── Search ────────────────────────────────────────────────────────────────────
 function onSearch(e) {
   const query = e.target.value.trim();
   state.searchQuery = query;
-
-  // Show/hide clear button
   els.searchClear.classList.toggle('visible', query.length > 0);
-
   clearTimeout(state.searchTimeout);
 
   if (!query) {
     els.searchCount.textContent = '';
-    // Go back to previous view
-    if (state.currentPartIndex !== null) {
-      showPart(state.currentPartIndex);
-    } else {
-      showWelcome();
-    }
+    if (state.currentPartIndex !== null) showPart(state.currentPartIndex);
+    else showWelcome();
     return;
   }
-
-  // Debounce
   state.searchTimeout = setTimeout(() => performSearch(query), 200);
 }
 
 function performSearch(query) {
   const { data } = state;
-  const q = query.toLowerCase();
+  const q       = query.toLowerCase();
   const results = [];
 
   data.parts.forEach((part, partIdx) => {
     part.articles.forEach((article, aIdx) => {
-      const titleMatch = article.title_np?.toLowerCase().includes(q);
-      const titleEnMatch = article.title_en?.toLowerCase().includes(q);
-      const contentMatch = article.content?.toLowerCase().includes(q);
-      const contentEnMatch = article.content_en?.toLowerCase().includes(q);
-      const enTitle = part.title_en?.toLowerCase().includes(q);
-
-      if (titleMatch || titleEnMatch || contentMatch || contentEnMatch || enTitle) {
+      if (
+        article.title_np?.toLowerCase().includes(q) ||
+        article.title_en?.toLowerCase().includes(q) ||
+        article.content?.toLowerCase().includes(q) ||
+        article.content_en?.toLowerCase().includes(q) ||
+        part.title_en?.toLowerCase().includes(q)
+      ) {
         results.push({ part, partIdx, article, aIdx });
       }
     });
   });
 
-  // Update count
   els.searchCount.textContent = results.length > 0
     ? `${results.length} result${results.length === 1 ? '' : 's'} found`
     : '';
 
-  // Switch to search view
   els.welcomeScreen.style.display = 'none';
-  els.partView.style.display = 'none';
-  els.searchView.style.display = 'block';
+  els.partView.style.display      = 'none';
+  els.searchView.style.display    = 'block';
 
   els.searchViewTitle.textContent = results.length
     ? `${results.length} result${results.length !== 1 ? 's' : ''} for "${query}"`
@@ -307,7 +406,7 @@ function performSearch(query) {
     return;
   }
 
-  results.forEach(({ part, partIdx, article, aIdx }, rIdx) => {
+  results.forEach(({ part, partIdx, article }, rIdx) => {
     const card = document.createElement('div');
     card.className = 'search-result-card';
     card.style.animationDelay = `${Math.min(rIdx * 0.03, 0.3)}s`;
@@ -329,12 +428,12 @@ function performSearch(query) {
     card.addEventListener('click', () => {
       clearSearch();
       showPart(partIdx);
-      // Expand the article after rendering
       setTimeout(() => {
         const artEl = document.getElementById(`article-${article.article_number}`);
         if (artEl) {
           artEl.classList.add('expanded');
           artEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          pushHash(`#article/${article.article_number}`);
         }
       }, 100);
     });
@@ -344,54 +443,44 @@ function performSearch(query) {
 }
 
 function getExcerpt(text, query, maxLen) {
-  const q = query.toLowerCase();
+  const q   = query.toLowerCase();
   const idx = text.toLowerCase().indexOf(q);
   if (idx === -1) return text.substring(0, maxLen) + (text.length > maxLen ? '…' : '');
-
-  const start = Math.max(0, idx - 60);
-  const end = Math.min(text.length, idx + maxLen - 60);
-  const excerpt = (start > 0 ? '…' : '') + text.substring(start, end) + (end < text.length ? '…' : '');
-  return excerpt;
+  const start   = Math.max(0, idx - 60);
+  const end     = Math.min(text.length, idx + maxLen - 60);
+  return (start > 0 ? '…' : '') + text.substring(start, end) + (end < text.length ? '…' : '');
 }
 
 function clearSearch() {
-  els.searchInput.value = '';
-  state.searchQuery = '';
+  els.searchInput.value       = '';
+  state.searchQuery           = '';
   els.searchClear.classList.remove('visible');
   els.searchCount.textContent = '';
-
-  if (state.currentPartIndex !== null) {
-    showPart(state.currentPartIndex);
-  } else {
-    showWelcome();
-  }
+  if (state.currentPartIndex !== null) showPart(state.currentPartIndex);
+  else showWelcome();
 }
 
 // ─── Welcome ───────────────────────────────────────────────────────────────────
-function showWelcome() {
+function showWelcome(updateHash = true) {
   els.welcomeScreen.style.display = 'block';
-  els.partView.style.display = 'none';
-  els.searchView.style.display = 'none';
+  els.partView.style.display      = 'none';
+  els.searchView.style.display    = 'none';
   document.querySelectorAll('.part-nav-item').forEach(el => el.classList.remove('active'));
   state.currentPartIndex = null;
+  if (updateHash) pushHash('#');
 }
 
 // ─── Mobile Sidebar ────────────────────────────────────────────────────────────
 function setupMobileSidebar() {
-  // Create overlay
   const overlay = document.createElement('div');
   overlay.className = 'sidebar-overlay';
-  overlay.id = 'sidebarOverlay';
+  overlay.id        = 'sidebarOverlay';
   document.body.appendChild(overlay);
 
   const toggleBtn = $('sidebarToggle');
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', toggleMobileSidebar);
-  }
-
+  if (toggleBtn) toggleBtn.addEventListener('click', toggleMobileSidebar);
   overlay.addEventListener('click', closeMobileSidebar);
 
-  // Also add a hamburger button to header for mobile
   const headerInner = document.querySelector('.header-inner');
   if (headerInner) {
     const mobileMenuBtn = document.createElement('button');
@@ -410,13 +499,11 @@ function setupMobileSidebar() {
     `;
     mobileMenuBtn.addEventListener('click', toggleMobileSidebar);
 
-    // Show only on mobile via JS resize
     const checkMobile = () => {
       mobileMenuBtn.style.display = window.innerWidth <= 720 ? 'flex' : 'none';
     };
     window.addEventListener('resize', checkMobile);
     checkMobile();
-
     headerInner.insertBefore(mobileMenuBtn, headerInner.firstChild);
   }
 }
@@ -447,15 +534,12 @@ function escapeHTML(str) {
 function highlightText(text, query) {
   if (!query || !text) return escapeHTML(text);
   const escaped = escapeHTML(text);
-  const q = escapeHTML(query);
-  // Case-insensitive highlight
-  const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  const q       = escapeHTML(query);
+  const regex   = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
   return escaped.replace(regex, '<mark>$1</mark>');
 }
 
-function padPart(num) {
-  return String(num).padStart(2, '0');
-}
+function padPart(num) { return String(num).padStart(2, '0'); }
 
 function toNepaliNum(num) {
   const nepali = ['०','१','२','३','४','५','६','७','८','९'];
@@ -464,24 +548,19 @@ function toNepaliNum(num) {
 
 // ─── Keyboard Navigation ───────────────────────────────────────────────────────
 document.addEventListener('keydown', (e) => {
-  // Ctrl/Cmd + K → focus search
   if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
     e.preventDefault();
     els.searchInput.focus();
     els.searchInput.select();
   }
 
-  // Escape → clear search or go home
   if (e.key === 'Escape') {
-    if (state.searchQuery) {
-      clearSearch();
-    } else if (document.activeElement === els.searchInput) {
-      els.searchInput.blur();
-    }
+    if (state.searchQuery) clearSearch();
+    else if (document.activeElement === els.searchInput) els.searchInput.blur();
   }
 
-  // Arrow keys for part navigation (when not in search)
-  if (!state.searchQuery && state.currentPartIndex !== null) {
+  if (!state.searchQuery && state.currentPartIndex !== null &&
+      document.activeElement !== els.searchInput) {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       const next = state.currentPartIndex + 1;
       if (next < state.data.parts.length) showPart(next);
@@ -493,44 +572,39 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-// ─── Theme (Dark/Light Mode) ───────────────────────────────────────────────────
+// ─── Theme ─────────────────────────────────────────────────────────────────────
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  try { localStorage.setItem('np-const-theme', theme); } catch(e) {}
+  try { localStorage.setItem('np-const-theme', theme); } catch (e) {}
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme');
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 }
 
 function initTheme() {
   let saved = null;
-  try { saved = localStorage.getItem('np-const-theme'); } catch(e) {}
+  try { saved = localStorage.getItem('np-const-theme'); } catch (e) {}
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   applyTheme(saved || (prefersDark ? 'dark' : 'light'));
 
-  // Attach toggle button — runs after DOM is ready
   const btn = document.getElementById('themeToggle');
-  if (btn) {
-    btn.addEventListener('click', toggleTheme);
-  }
+  if (btn) btn.addEventListener('click', toggleTheme);
 
-  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ev => {
     let s = null;
-    try { s = localStorage.getItem('np-const-theme'); } catch(e2) {}
-    if (!s) applyTheme(e.matches ? 'dark' : 'light');
+    try { s = localStorage.getItem('np-const-theme'); } catch (e) {}
+    if (!s) applyTheme(ev.matches ? 'dark' : 'light');
   });
 }
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
-// Apply theme immediately (before full init) to avoid flash
-(function() {
+(function () {
   let saved = null;
-  try { saved = localStorage.getItem('np-const-theme'); } catch(e) {}
+  try { saved = localStorage.getItem('np-const-theme'); } catch (e) {}
   const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   document.documentElement.setAttribute('data-theme', saved || (prefersDark ? 'dark' : 'light'));
-})();
+}());
 
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();

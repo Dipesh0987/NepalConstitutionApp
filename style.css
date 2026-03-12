@@ -30,6 +30,20 @@
   --shadow-sm: 0 1px 3px rgba(28,20,16,0.06), 0 1px 2px rgba(28,20,16,0.04);
   --shadow-md: 0 4px 16px rgba(28,20,16,0.08), 0 2px 6px rgba(28,20,16,0.06);
   --shadow-lg: 0 12px 40px rgba(28,20,16,0.12);
+
+  /* Layout & typography tokens — must live in :root, not dark block */
+  --font-np: 'Noto Sans Devanagari', serif;
+  --font-en: 'Lora', Georgia, serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --radius: 8px;
+  --radius-sm: 4px;
+  --radius-lg: 12px;
+
+  --sidebar-width: 300px;
+  --header-height: 64px;
+  --search-height: 64px;
+  --transition: 0.2s ease;
 }
 
 /* === DARK MODE TOKENS === */
@@ -58,19 +72,6 @@
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 2px 6px rgba(0,0,0,0.3);
   --shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
-
-  --font-np: 'Noto Sans Devanagari', serif;
-  --font-en: 'Lora', Georgia, serif;
-  --font-mono: 'JetBrains Mono', monospace;
-
-  --radius: 8px;
-  --radius-sm: 4px;
-  --radius-lg: 12px;
-
-  --sidebar-width: 300px;
-  --header-height: 64px;
-  --search-height: 64px;
-  --transition: 0.2s ease;
 }
 
 /* === THEME TRANSITION === */
@@ -1109,6 +1110,75 @@ mark {
   inset: 0;
   background: rgba(0,0,0,0.5);
   z-index: 199;
+}
+
+.sidebar-overlay.active { display: block; }
+
+/* === SHARE BUTTON === */
+.article-share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: all var(--transition);
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.article-share-btn:hover {
+  border-color: var(--crimson-dim);
+  color: var(--crimson);
+  background: var(--crimson-glow);
+}
+
+.article-share-btn svg {
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
+}
+
+/* === TOAST NOTIFICATION === */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(16px);
+  background: var(--text-primary);
+  color: var(--bg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 10px 20px;
+  border-radius: 24px;
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 9999;
+  white-space: nowrap;
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* === URL HIGHLIGHT — article scrolled to via deep link === */
+.article-card.deep-linked {
+  animation: deepLinkPulse 1.6s ease forwards;
+}
+
+@keyframes deepLinkPulse {
+  0%   { box-shadow: 0 0 0 4px var(--crimson-dim); border-color: var(--crimson-dim); }
+  60%  { box-shadow: 0 0 0 4px var(--crimson-dim); border-color: var(--crimson-dim); }
+  100% { box-shadow: var(--shadow-sm); border-color: var(--border); }
 }
 
 .sidebar-overlay.active { display: block; }
