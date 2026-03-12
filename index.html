@@ -1,14 +1,18 @@
 <!DOCTYPE html>
 <html lang="ne" dir="ltr">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>नेपालको संविधान — Premium Explorer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Outfit:wght@500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap"
+    rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/style.css" />
 </head>
+
 <body>
   <!-- Ambient Background Orbs -->
   <div class="ambient-mesh">
@@ -30,30 +34,42 @@
             <p class="title-en">CONSTITUTION OF NEPAL</p>
           </div>
         </a>
-        
+
         <!-- Search Bar -->
         <div class="search-wrap">
           <div class="search-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
           </div>
-          <input type="text" id="searchInput" class="search-input" placeholder="धाराहरू खोज्नुहोस् (Search articles)..." autocomplete="off" />
+          <input type="text" id="searchInput" class="search-input" placeholder="धाराहरू खोज्नुहोस् (Search articles)..."
+            autocomplete="off" />
           <button class="search-clear" id="searchClear" aria-label="Clear search">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
 
         <div class="header-actions">
-          <a href="https://www.lawcommission.gov.np" target="_blank" class="glass-badge highlight-badge">स्रोत (Source) ↗</a>
+          <a href="https://www.lawcommission.gov.np" target="_blank" class="glass-badge highlight-badge">स्रोत (Source)
+            ↗</a>
           <button class="glass-btn icon-btn theme-toggle" id="themeToggle" aria-label="Toggle dark mode">
             <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
             <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+              <circle cx="12" cy="12" r="5" />
+              <line x1="12" y1="1" x2="12" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="23" />
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+              <line x1="1" y1="12" x2="3" y2="12" />
+              <line x1="21" y1="12" x2="23" y2="12" />
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
             </svg>
           </button>
         </div>
@@ -69,7 +85,8 @@
           <h3 class="sidebar-title">३५ भागहरू (35 Parts)</h3>
           <button class="glass-btn icon-btn mobile-close" id="sidebarToggleClose">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
           </button>
         </div>
@@ -85,11 +102,12 @@
         <div class="welcome-screen glass-panel" id="welcomeScreen">
           <div class="welcome-hero">
             <div class="hero-logo" style="display:flex;align-items:center;justify-content:center;margin-bottom:1rem;">
-              <img src="assets/img/nishan_chhap.svg" alt="Nishan Chhap" style="height:80px;width:auto;pointer-events:none;" />
+              <img src="assets/img/nishan_chhap.svg" alt="Nishan Chhap"
+                style="height:80px;width:auto;pointer-events:none;" />
             </div>
             <h2 class="hero-title">नेपालको संविधान</h2>
             <p class="hero-subtitle">CONSTITUTION OF NEPAL · 2072 BS (2015 AD)</p>
-            
+
             <div class="stats-row">
               <div class="stat-card">
                 <span class="stat-num" id="statParts">35</span>
@@ -129,15 +147,17 @@
           </div>
           <div class="search-results-list" id="searchResultsList"></div>
         </div>
-        
+
         <footer class="glass-footer">
-          <p><strong>Nepal Constitution Explorer</strong> — Premium UI Edition</p>
+          <p><strong>Nepal Constitution Explorer</strong></p>
         </footer>
 
       </main>
     </div>
   </div>
 
+  <script src="assets/js/nepali-corrections.js"></script>
   <script src="assets/js/app.js"></script>
 </body>
+
 </html>
