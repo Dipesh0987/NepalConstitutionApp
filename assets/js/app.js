@@ -52,8 +52,8 @@ function render() {
   const { data } = state;
   if (!data) return;
 
-  if (els.statParts) els.statParts.textContent = data.parts.length;
-  if (els.statArticles) els.statArticles.textContent = data.parts.reduce((a, p) => a + p.articles.length, 0);
+  if (els.statParts) els.statParts.textContent = toNepaliNum(data.parts.length);
+  if (els.statArticles) els.statArticles.textContent = toNepaliNum(data.parts.reduce((a, p) => a + p.articles.length, 0));
   if (els.preambleText) els.preambleText.textContent = data.preamble || '(Preamble not available)';
 
   if (els.partsNav) {
@@ -68,7 +68,7 @@ function render() {
           <div class="part-nav-np">${part.title_np}</div>
           ${part.title_en ? `<div class="part-nav-en">${part.title_en}</div>` : ''}
         </div>
-        <span class="part-nav-count">${part.articles.length}</span>
+        <span class="part-nav-count">${toNepaliNum(part.articles.length)}</span>
       `;
       item.addEventListener('click', () => {
         showPart(idx);
@@ -166,10 +166,10 @@ function showPart(idx, updateHash = true) {
       ${part.title_en ? `<p class="part-title-en">${part.title_en}</p>` : ''}
       <div class="part-meta-row">
         <span class="glass-badge highlight-badge">भाग ${toNepaliNum(part.part_number)} · Part ${part.part_number}</span>
-        <span class="glass-badge">${part.articles.length} धाराहरू · Articles</span>
+        <span class="glass-badge">${toNepaliNum(part.articles.length)} धाराहरू · Articles</span>
         <div class="part-nav-arrows">
-          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx - 1})" ${isFirst ? 'disabled' : ''}>← Prev</button>
-          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx + 1})" ${isLast  ? 'disabled' : ''}>Next →</button>
+          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx - 1})" ${isFirst ? 'disabled' : ''}>← अघिल्लो (Prev)</button>
+          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx + 1})" ${isLast  ? 'disabled' : ''}>अर्को (Next) →</button>
         </div>
       </div>
     `;
@@ -218,14 +218,14 @@ function buildArticleCard(article, partIdx, aIdx, highlight = '') {
     <div class="article-body">
       <div class="article-content">${contentFormatted}</div>
       <div class="article-footer">
-        <span class="article-ref-label">Reference</span>
-        <span class="article-dharaa">धारा ${article.article_number_np || article.article_number}</span>
+        <span class="article-ref-label">सन्दर्भ (Reference)</span>
+        <span class="article-dharaa">धारा ${toNepaliNum(article.article_number_np || article.article_number)}</span>
         <button class="article-share-btn" data-url="${escapeHTML(articleURL)}" title="Copy link">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
             <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
           </svg>
-          Copy link
+          लिङ्क प्रतिलिपि गर्नुहोस् (Copy link)
         </button>
       </div>
     </div>
@@ -260,15 +260,15 @@ function formatArticleContent(content, highlight = '') {
 function copyToClipboard(text) {
   if (navigator.clipboard?.writeText) {
     navigator.clipboard.writeText(text)
-      .then(() => showToast('✓  Link copied to clipboard'))
-      .catch(() => showToast('Copy failed'));
+      .then(() => showToast('✓ लिङ्क प्रतिलिपि भयो (Link copied)'))
+      .catch(() => showToast('प्रतिलिपि गर्न असफल (Copy failed)'));
   } else {
     const ta = document.createElement('textarea');
     ta.value = text;
     document.body.appendChild(ta);
     ta.select();
-    try { document.execCommand('copy'); showToast('✓  Link copied'); }
-    catch { showToast('Copy failed'); }
+    try { document.execCommand('copy'); showToast('✓ लिङ्क प्रतिलिपि भयो (Link copied)'); }
+    catch { showToast('प्रतिलिपि गर्न असफल (Copy failed)'); }
     document.body.removeChild(ta);
   }
 }
@@ -312,14 +312,14 @@ function performSearch(query) {
     });
   });
 
-  if (els.searchCount) els.searchCount.textContent = results.length > 0 ? `${results.length} result(s)` : '';
+  if (els.searchCount) els.searchCount.textContent = results.length > 0 ? `${toNepaliNum(results.length)} नतिजा(हरू) / result(s)` : '';
 
   if (els.welcomeScreen) els.welcomeScreen.style.display = 'none';
   if (els.partView) els.partView.style.display      = 'none';
   if (els.searchView) els.searchView.style.display    = 'block';
 
   if (els.searchViewTitle) {
-    els.searchViewTitle.textContent = results.length ? `${results.length} result(s) for "${query}"` : `No results found.`;
+    els.searchViewTitle.textContent = results.length ? `"${query}" को लागि ${toNepaliNum(results.length)} नतिजा(हरू) / result(s)` : `कुनै नतिजा फेला परेन। (No results found.)`;
   }
 
   if (els.searchResultsList) {
@@ -333,8 +333,8 @@ function performSearch(query) {
 
       card.innerHTML = `
         <div class="search-result-header">
-          <span>Part ${part.part_number} · ${part.title_en || part.title_np}</span>
-          <span>Art. ${article.article_number}</span>
+          <span>भाग ${toNepaliNum(part.part_number)} · ${part.title_en || part.title_np}</span>
+          <span>धारा ${toNepaliNum(article.article_number)}</span>
         </div>
         <div class="search-result-title">${highlightText(article.title_en || article.title_np, query)}</div>
         ${article.title_np ? `<div class="search-result-np">${escapeHTML(article.title_np)}</div>` : ''}
