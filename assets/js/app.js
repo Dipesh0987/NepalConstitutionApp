@@ -359,8 +359,9 @@ async function init() {
       'गने': 'गर्ने'
     };
     
-    for (const [bad, good] of Object.entries(replacements)) {
-      rawText = rawText.split(bad).join(good);
+    const sortedBadWords = Object.keys(replacements).sort((a, b) => b.length - a.length);
+    for (const bad of sortedBadWords) {
+      rawText = rawText.split(bad).join(replacements[bad]);
     }
     
     state.data = JSON.parse(rawText);
