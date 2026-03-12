@@ -1,0 +1,442 @@
+/**
+ * Nepal Constitution Explorer — app.js
+ */
+
+'use strict';
+
+const state = {
+  data: null,
+  currentPartIndex: null,
+  searchQuery: '',
+  searchTimeout: null,
+  suppressHistory: false,
+};
+
+const $ = id => document.getElementById(id);
+const els = {
+  partsNav:          $('partsNav'),
+  welcomeScreen:     $('welcomeScreen'),
+  partView:          $('partView'),
+  partHeader:        $('partHeader'),
+  articlesList:      $('articlesList'),
+  searchView:        $('searchView'),
+  searchViewTitle:   $('searchViewTitle'),
+  searchResultsList: $('searchResultsList'),
+  searchInput:       $('searchInput'),
+  searchClear:       $('searchClear'),
+  searchCount:       $('searchCount'),
+  preambleText:      $('preambleText'),
+  statParts:         $('statParts'),
+  statArticles:      $('statArticles'),
+  sidebar:           $('sidebar'),
+};
+
+async function init() {
+  try {
+    const res = await fetch('data/constitution.json');
+    if (!res.ok) throw new Error('Failed to load constitution data');
+    state.data = await res.json();
+    render();
+    handleHashNavigation();
+  } catch (err) {
+    if ($('mainContent')) {
+      $('mainContent').innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:center;height:100%;text-align:center;">
+          <div><h2 style="color:var(--accent);">⚠️ Setup Error</h2><p style="color:var(--text-muted);">${err.message}</p></div>
+        </div>`;
+    }
+  }
+}
+
+function render() {
+  const { data } = state;
+  if (!data) return;
+
+  if (els.statParts) els.statParts.textContent = data.parts.length;
+  if (els.statArticles) els.statArticles.textContent = data.parts.reduce((a, p) => a + p.articles.length, 0);
+  if (els.preambleText) els.preambleText.textContent = data.preamble || '(Preamble not available)';
+
+  if (els.partsNav) {
+    els.partsNav.innerHTML = '';
+    data.parts.forEach((part, idx) => {
+      const item = document.createElement('div');
+      item.className   = 'part-nav-item';
+      item.dataset.idx = idx;
+      item.innerHTML = `
+        <span class="part-nav-num">${toNepaliNum(part.part_number)}</span>
+        <div class="part-nav-titles">
+          <div class="part-nav-np">${part.title_np}</div>
+          ${part.title_en ? `<div class="part-nav-en">${part.title_en}</div>` : ''}
+        </div>
+        <span class="part-nav-count">${part.articles.length}</span>
+      `;
+      item.addEventListener('click', () => {
+        showPart(idx);
+        closeMobileSidebar();
+      });
+      els.partsNav.appendChild(item);
+    });
+  }
+
+  if (els.searchInput) els.searchInput.addEventListener('input', onSearch);
+  if (els.searchClear) els.searchClear.addEventListener('click', clearSearch);
+
+  setupMobileSidebar();
+
+  const toast = document.createElement('div');
+  toast.id        = 'toast';
+  toast.className = 'toast';
+  document.body.appendChild(toast);
+}
+
+function handleHashNavigation() {
+  const hash = window.location.hash;
+  if (!hash || hash === '#') return showWelcome(false);
+
+  const match = hash.match(/^#(part|article)\/(\d+)$/);
+  if (!match) return showWelcome(false);
+
+  const type  = match[1];
+  const value = parseInt(match[2], 10);
+  const { data } = state;
+  if (!data) return;
+
+  if (type === 'part') {
+    const partIdx = data.parts.findIndex(p => p.part_number === value);
+    if (partIdx !== -1) showPart(partIdx, false);
+    else showWelcome(false);
+  } else if (type === 'article') {
+    let foundPartIdx = -1;
+    for (let i = 0; i < data.parts.length; i++) {
+      if (data.parts[i].articles.find(a => a.article_number === value)) {
+        foundPartIdx = i; break;
+      }
+    }
+    if (foundPartIdx !== -1) {
+      showPart(foundPartIdx, false);
+      requestAnimationFrame(() => {
+        const artEl = document.getElementById(`article-${value}`);
+        if (artEl) {
+          artEl.classList.add('expanded', 'deep-linked');
+          artEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          artEl.addEventListener('animationend', () => artEl.classList.remove('deep-linked'), { once: true });
+        }
+      });
+    } else {
+      showWelcome(false);
+    }
+  }
+}
+
+function pushHash(hash) {
+  if (state.suppressHistory) return;
+  if (window.location.hash !== hash) history.pushState(null, '', hash);
+}
+
+window.addEventListener('popstate', () => {
+  state.suppressHistory = true;
+  handleHashNavigation();
+  state.suppressHistory = false;
+});
+
+function showPart(idx, updateHash = true) {
+  const { data } = state;
+  const part = data.parts[idx];
+  state.currentPartIndex = idx;
+
+  if (updateHash) pushHash(`#part/${part.part_number}`);
+
+  document.querySelectorAll('.part-nav-item').forEach((el, i) => {
+    el.classList.toggle('active', i === idx);
+  });
+
+  if (els.welcomeScreen) els.welcomeScreen.style.display = 'none';
+  if (els.searchView) els.searchView.style.display    = 'none';
+  if (els.partView) els.partView.style.display      = 'block';
+
+  if (state.searchQuery) clearSearch();
+
+  const isFirst = idx === 0;
+  const isLast  = idx === data.parts.length - 1;
+
+  if (els.partHeader) {
+    els.partHeader.innerHTML = `
+      <div class="part-breadcrumb">नेपालको संविधान › भाग ${toNepaliNum(part.part_number)}</div>
+      <h2 class="part-title-np">${part.title_np}</h2>
+      ${part.title_en ? `<p class="part-title-en">${part.title_en}</p>` : ''}
+      <div class="part-meta-row">
+        <span class="glass-badge highlight-badge">भाग ${toNepaliNum(part.part_number)} · Part ${part.part_number}</span>
+        <span class="glass-badge">${part.articles.length} धाराहरू · Articles</span>
+        <div class="part-nav-arrows">
+          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx - 1})" ${isFirst ? 'disabled' : ''}>← Prev</button>
+          <button class="glass-btn part-nav-arrow" onclick="showPart(${idx + 1})" ${isLast  ? 'disabled' : ''}>Next →</button>
+        </div>
+      </div>
+    `;
+  }
+
+  if (els.articlesList) {
+    els.articlesList.innerHTML = '';
+    part.articles.forEach((article, aIdx) => {
+      const card = buildArticleCard(article, idx, aIdx);
+      els.articlesList.appendChild(card);
+    });
+    els.articlesList.parentElement.scrollTop = 0;
+  }
+}
+
+function buildArticleCard(article, partIdx, aIdx, highlight = '') {
+  const card    = document.createElement('div');
+  card.className = 'article-card';
+  card.id        = `article-${article.article_number}`;
+
+  const enTitle        = article.title_en   || '';
+  const enContent      = article.content_en || '';
+  const displayContent = enContent || article.content || '';
+
+  let previewText = displayContent
+    ? displayContent.substring(0, 140).replace(/\n/g, ' ') + (displayContent.length > 140 ? '…' : '')
+    : '';
+  let contentFormatted = formatArticleContent(displayContent, highlight);
+  const articleURL = `${location.href.split('#')[0]}#article/${article.article_number}`;
+
+  card.innerHTML = `
+    <div class="article-header" role="button" aria-expanded="false">
+      <div class="article-num-badge">
+        <span class="np-num">${article.article_number_np || article.article_number}</span>
+        <span class="art-num">Art. ${article.article_number}</span>
+      </div>
+      <div class="article-title-block">
+        <div class="article-title-en">${highlight ? highlightText(enTitle || article.title_np, highlight) : (enTitle || escapeHTML(article.title_np))}</div>
+        ${article.title_np ? `<div class="article-title-np-sub">${highlight ? highlightText(article.title_np, highlight) : escapeHTML(article.title_np)}</div>` : ''}
+        <div class="article-title-preview">${highlight ? highlightText(previewText, highlight) : escapeHTML(previewText)}</div>
+      </div>
+      <span class="article-expand-icon">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </span>
+    </div>
+    <div class="article-body">
+      <div class="article-content">${contentFormatted}</div>
+      <div class="article-footer">
+        <span class="article-ref-label">Reference</span>
+        <span class="article-dharaa">धारा ${article.article_number_np || article.article_number}</span>
+        <button class="article-share-btn" data-url="${escapeHTML(articleURL)}" title="Copy link">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+            <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+          </svg>
+          Copy link
+        </button>
+      </div>
+    </div>
+  `;
+
+  const header = card.querySelector('.article-header');
+  header.addEventListener('click', () => {
+    const expanded = card.classList.toggle('expanded');
+    header.setAttribute('aria-expanded', expanded);
+    if (expanded) pushHash(`#article/${article.article_number}`);
+    else if (state.currentPartIndex !== null) pushHash(`#part/${state.data.parts[state.currentPartIndex].part_number}`);
+  });
+
+  card.querySelector('.article-share-btn').addEventListener('click', e => {
+    e.stopPropagation();
+    copyToClipboard(e.currentTarget.dataset.url);
+  });
+
+  return card;
+}
+
+function formatArticleContent(content, highlight = '') {
+  if (!content) return '';
+  let formatted = escapeHTML(content);
+  if (highlight) formatted = highlightText(formatted, highlight);
+  return formatted.replace(/(\([\s\S]{1,4}?\))/g, (match) => {
+    if (/^\([०-९क-ह\d]+\)$/.test(match.trim())) return `\n${match}`;
+    return match;
+  });
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => showToast('✓  Link copied to clipboard'))
+      .catch(() => showToast('Copy failed'));
+  } else {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); showToast('✓  Link copied'); }
+    catch { showToast('Copy failed'); }
+    document.body.removeChild(ta);
+  }
+}
+
+let toastTimer = null;
+function showToast(message) {
+  const toast = $('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2400);
+}
+
+function onSearch(e) {
+  const query = e.target.value.trim();
+  state.searchQuery = query;
+  if (els.searchClear) els.searchClear.classList.toggle('visible', query.length > 0);
+  clearTimeout(state.searchTimeout);
+
+  if (!query) return clearSearch();
+  state.searchTimeout = setTimeout(() => performSearch(query), 200);
+}
+
+function performSearch(query) {
+  const { data } = state;
+  const q       = query.toLowerCase();
+  const results = [];
+
+  data.parts.forEach((part, partIdx) => {
+    part.articles.forEach((article, aIdx) => {
+      if (
+        article.title_np?.toLowerCase().includes(q) ||
+        article.title_en?.toLowerCase().includes(q) ||
+        article.content?.toLowerCase().includes(q) ||
+        article.content_en?.toLowerCase().includes(q) ||
+        part.title_en?.toLowerCase().includes(q)
+      ) {
+        results.push({ part, partIdx, article, aIdx });
+      }
+    });
+  });
+
+  if (els.searchCount) els.searchCount.textContent = results.length > 0 ? `${results.length} result(s)` : '';
+
+  if (els.welcomeScreen) els.welcomeScreen.style.display = 'none';
+  if (els.partView) els.partView.style.display      = 'none';
+  if (els.searchView) els.searchView.style.display    = 'block';
+
+  if (els.searchViewTitle) {
+    els.searchViewTitle.textContent = results.length ? `${results.length} result(s) for "${query}"` : `No results found.`;
+  }
+
+  if (els.searchResultsList) {
+    els.searchResultsList.innerHTML = '';
+    results.forEach(({ part, partIdx, article }) => {
+      const card = document.createElement('div');
+      card.className = 'search-result-card glass-panel';
+      card.style.marginBottom = '12px';
+      
+      const excerpt = (article.content_en || article.content) ? getExcerpt(article.content_en || article.content, query, 160) : '';
+
+      card.innerHTML = `
+        <div class="search-result-header">
+          <span>Part ${part.part_number} · ${part.title_en || part.title_np}</span>
+          <span>Art. ${article.article_number}</span>
+        </div>
+        <div class="search-result-title">${highlightText(article.title_en || article.title_np, query)}</div>
+        ${article.title_np ? `<div class="search-result-np">${escapeHTML(article.title_np)}</div>` : ''}
+        <div class="search-result-excerpt">${highlightText(excerpt, query)}</div>
+      `;
+
+      card.addEventListener('click', () => {
+        clearSearch();
+        showPart(partIdx);
+        setTimeout(() => {
+          const artEl = document.getElementById(`article-${article.article_number}`);
+          if (artEl) {
+            artEl.classList.add('expanded');
+            artEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            pushHash(`#article/${article.article_number}`);
+          }
+        }, 100);
+      });
+      els.searchResultsList.appendChild(card);
+    });
+  }
+}
+
+function getExcerpt(text, query, maxLen) {
+  const q   = query.toLowerCase();
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx === -1) return text.substring(0, maxLen) + (text.length > maxLen ? '…' : '');
+  const start   = Math.max(0, idx - 60);
+  const end     = Math.min(text.length, idx + maxLen - 60);
+  return (start > 0 ? '…' : '') + text.substring(start, end) + (end < text.length ? '…' : '');
+}
+
+function clearSearch() {
+  if (els.searchInput) els.searchInput.value = '';
+  state.searchQuery = '';
+  if (els.searchClear) els.searchClear.classList.remove('visible');
+  if (els.searchCount) els.searchCount.textContent = '';
+  if (state.currentPartIndex !== null) showPart(state.currentPartIndex);
+  else showWelcome();
+}
+
+function showWelcome(updateHash = true) {
+  if (els.welcomeScreen) els.welcomeScreen.style.display = 'block';
+  if (els.partView) els.partView.style.display = 'none';
+  if (els.searchView) els.searchView.style.display = 'none';
+  document.querySelectorAll('.part-nav-item').forEach(el => el.classList.remove('active'));
+  state.currentPartIndex = null;
+  if (updateHash) pushHash('#');
+}
+
+function setupMobileSidebar() {
+  const headerInner = document.querySelector('.header-inner');
+  if (headerInner && !document.querySelector('.mobile-menu-btn')) {
+    const mobileMenuBtn = document.createElement('button');
+    mobileMenuBtn.className = 'glass-btn icon-btn mobile-menu-btn';
+    mobileMenuBtn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`;
+    mobileMenuBtn.style.display = 'none';
+    
+    const checkMobile = () => { mobileMenuBtn.style.display = window.innerWidth <= 900 ? 'flex' : 'none'; };
+    window.addEventListener('resize', checkMobile); checkMobile();
+    
+    mobileMenuBtn.addEventListener('click', () => { if(els.sidebar) els.sidebar.classList.add('open'); });
+    headerInner.insertBefore(mobileMenuBtn, headerInner.firstChild);
+    
+    const closeBtn = $('sidebarToggleClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeMobileSidebar);
+  }
+}
+
+function closeMobileSidebar() { if (els.sidebar) els.sidebar.classList.remove('open'); }
+
+function escapeHTML(str) {
+  if (!str) return '';
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function highlightText(text, query) {
+  if (!query || !text) return escapeHTML(text);
+  const escaped = escapeHTML(text); const q = escapeHTML(query);
+  const regex = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+  return escaped.replace(regex, '<mark>$1</mark>');
+}
+function toNepaliNum(num) {
+  const nepali = ['०','१','२','३','४','५','६','७','८','९'];
+  return String(num).split('').map(d => nepali[parseInt(d)] || d).join('');
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('np-const-theme', theme); } catch (e) {}
+}
+function initTheme() {
+  let saved = null; try { saved = localStorage.getItem('np-const-theme'); } catch (e) {}
+  applyTheme(saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  const btn = $('themeToggle');
+  if (btn) btn.addEventListener('click', () => {
+    applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+}
+
+(function () {
+  let saved = null; try { saved = localStorage.getItem('np-const-theme'); } catch (e) {}
+  document.documentElement.setAttribute('data-theme', saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+}());
+
+document.addEventListener('DOMContentLoaded', () => { initTheme(); init(); });
