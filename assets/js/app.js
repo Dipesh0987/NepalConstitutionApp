@@ -704,4 +704,16 @@ function initTheme() {
   document.documentElement.setAttribute('data-theme', saved || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 }());
 
-document.addEventListener('DOMContentLoaded', () => { initTheme(); init(); });
+document.addEventListener('DOMContentLoaded', () => { 
+  initTheme(); 
+  init(); 
+  const homeBtn = document.getElementById('homeLogo');
+  if (homeBtn) {
+    homeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      clearSearch();
+      showWelcome(true);
+      if (window.innerWidth <= 900) closeMobileSidebar();
+    });
+  }
+});
